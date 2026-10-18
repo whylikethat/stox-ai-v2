@@ -103,6 +103,12 @@ All four horizon outputs accompany each ranked security. Downside exceedance pro
 
 The official paper entry is the next regular session open strictly after actual issuance. Entry is pending until the daily raw SIP open is available at a subsequent run. The horizon starts on that entry date; settlement is the first regular session close on/after entry + N calendar days. Daily SIP open/close are reproducible paper-price references, not a guarantee of an auction fill. Dividends are accrued without reinvestment; splits update units; configurable round-trip friction defaults to 20 basis points. USD only, no FX modeling or position sizing.
 
+## Alpha ranker and top 10 (2.4.0)
+
+Reports now open with a **Top 10 — alpha ranker** table (expected excess return over SPY, risk-capped) followed by
+**Your holdings**, with alerts first. The ranker is labelled NOT VALIDATED until its holdout checks pass, and the
+evidence lines show exactly what it earned on data it never trained on. Read `docs/RANKER.md` before relying on it.
+
 ## Holdings
 
 ```bash

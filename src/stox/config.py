@@ -54,7 +54,16 @@ class Config:
     screen_lookback_days: int = 90
     screen_batch_size: int = 100
     screen_min_sessions: int = 20
-    sec_symbols_per_run: int = 20
+    sec_symbols_per_run: int = 200
+    ranker_enabled: bool = True
+    ranker_horizons: tuple[int, ...] = (30, 60, 90)
+    ranker_top_n: int = 10
+    ranker_max_p_loss_10: float = .15
+    ranker_min_cohorts: int = 6
+    ranker_holdout_fraction: float = .25
+    ranker_max_rows: int = 200_000
+    stop_atr_multiple: float = 2.5
+    desktop_notifications: bool = True
     report_retention_runs: int = 30
     news_pages_per_run: int = 100
     history_window_days: int = 365
@@ -71,7 +80,7 @@ class Config:
         location = Path(root or os.environ.get('STOX_HOME') or configured_root).expanduser()
         if not location.is_absolute():
             location = base / location
-        for key in ('horizons', 'symbols', 'macro_series', 'model_algorithms'):
+        for key in ('horizons', 'symbols', 'macro_series', 'model_algorithms', 'ranker_horizons'):
             if key in values:
                 values[key] = tuple(values[key])
         cfg = cls(root=location.resolve(), **values)
@@ -98,6 +107,15 @@ class Config:
             raise ValueError('Invalid friction or storage limits.')
         if not 0 < cfg.max_identifier_failure_fraction <= 1 or cfg.min_identifier_failures < 2:
             raise ValueError('Invalid universe identifier-failure limits.')
+        for key in ('ranker_enabled', 'desktop_notifications'):
+            if type(getattr(cfg, key)) is not bool:
+                raise ValueError(f'{key} must be a boolean')
+        if not 1 <= cfg.ranker_top_n <= 50 or not 0 < cfg.ranker_max_p_loss_10 <= 1 or cfg.ranker_min_cohorts < 3:
+            raise ValueError('ranker_top_n must be 1-50, ranker_max_p_loss_10 in (0,1], ranker_min_cohorts at least 3')
+        if not .1 <= cfg.ranker_holdout_fraction <= .5 or cfg.ranker_max_rows < 5000 or cfg.stop_atr_multiple <= 0:
+            raise ValueError('Invalid ranker holdout fraction, row cap or stop multiple')
+        if any(h <= 0 for h in cfg.ranker_horizons) or not cfg.ranker_horizons:
+            raise ValueError('ranker_horizons must be positive calendar-day values')
         secrets_path = base / '.secrets' / 'providers.env'
         if secrets_path.exists():
             for line in secrets_path.read_text().splitlines():

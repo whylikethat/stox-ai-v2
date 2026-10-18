@@ -1,3 +1,11 @@
+## 2.4.0
+
+- Add the alpha ranker: cross-sectional model of excess return over SPY, trained on per-session percentile ranks, judged on a purged holdout of non-overlapping cohorts against momentum and random baselines, and labelled NOT VALIDATED unless pre-declared checks pass. See docs/RANKER.md.
+- Add a risk-capped top 10 (common stocks, adequate data, price floor, 30D P(loss >10%) cap) to the terminal, Markdown and HTML reports, with holdings shown directly beneath it.
+- Add holdings alerts: ATR trailing stop, negative model outlook and adverse 8-K items, plus optional desktop notification.
+- Fix SEC ingestion: a missing company-facts document (HTTP 404) is now an issuer property, not a provider outage. It previously wedged the SEC refresh on one issuer and blanked the fundamentals family.
+- Raise the default SEC batch to 200 issuers per run; example configs use a 50 dollar price floor.
+
 ## 2.3.0
 
 ## 2.3.1

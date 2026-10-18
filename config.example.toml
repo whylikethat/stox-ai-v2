@@ -10,7 +10,7 @@ enable_sec = true
 enable_fred = true
 enable_alpha_vantage = true
 friction_bps = 20.0
-min_price = 5.0
+min_price = 50.0
 min_dollar_volume = 20000000.0
 min_history = 252
 min_core_coverage = 0.90
@@ -45,7 +45,7 @@ screen_batch_size = 100
 screen_min_sessions = 20
 history_window_days = 365
 news_pages_per_run = 100
-sec_symbols_per_run = 20
+sec_symbols_per_run = 200
 report_retention_runs = 30
 
 # Optional delayed public disclosures; see docs/PUBLIC_DISCLOSURES.md before enabling.
@@ -64,3 +64,17 @@ enable_options_signals = false
 earnings_symbols_per_run = 3
 # Bound each challenger evaluation; frozen forward trials do not retrain every run.
 challenger_max_rows = 60000
+
+# Alpha ranker (v2.4): orders securities by expected excess return over SPY. It is labelled
+# NOT VALIDATED until its purged holdout checks pass; see docs/RANKER.md.
+ranker_enabled = true
+ranker_horizons = [30, 60, 90]
+ranker_top_n = 10
+# Risk cap: skip candidates whose 30D probability of losing more than 10% exceeds this.
+ranker_max_p_loss_10 = 0.15
+ranker_min_cohorts = 6
+ranker_holdout_fraction = 0.25
+ranker_max_rows = 200000
+# Holdings alerts: trailing stop = highest close since purchase minus this many ATRs.
+stop_atr_multiple = 2.5
+desktop_notifications = true

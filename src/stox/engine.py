@@ -135,6 +135,12 @@ def _run(cfg,offline=False,force_train=False,timestamp=None,synthetic=False):
                 for row in rows:
                     row['primary_rank']=next((p['rank'] for p in primary if p['symbol']==row['symbol'] and row['horizon']==30),None)
                     row['across_rank']=next((p['rank'] for p in across if p['symbol']==row['symbol'] and p['horizon']==row['horizon']),None)
+                from .ranker import run_ranker
+                ranker,ranker_percentiles=run_ranker(cfg,store,cal,features,labels,current,rows,assets,started,force_train)
+                if ranker['status']=='ERROR':
+                    warnings.append('Alpha ranker failed and was skipped: '+ranker['error'])
+                elif ranker['status'].startswith('RESEARCH'):
+                    warnings.append('Alpha ranker has not passed its holdout validation checks; its top 10 is research, not evidence of an edge')
                 snapshots={kind:store.records(kind,started) for kind in ('news','filings','facts','earnings','actions','disclosure_documents','disclosure_transactions')}
                 snapshots=index_evidence(snapshots)
                 context={s:evidence(store,s,started,cfg,snapshots) for s in {r['symbol'] for r in rows}}
@@ -142,6 +148,10 @@ def _run(cfg,offline=False,force_train=False,timestamp=None,synthetic=False):
                 highlights={r['symbol'] for r in primary[:3]+across[:3]}|{h['symbol'] for h in holdings if h['status']!='HEALTHY'}
                 for holding in holdings:
                     holding['evidence']=context.get(holding['symbol'],{})
+                from .alerts import add_alerts,notify
+                add_alerts(holdings,cfg,store,ranker_percentiles,started)
+                if not synthetic and not offline and cfg.desktop_notifications:
+                    notify(holdings)
                 details=[]
                 with threadpool_limits(limits=cfg.threads):
                     for symbol in sorted(highlights|{r['symbol'] for r in primary+across}):
@@ -194,7 +204,7 @@ def _run(cfg,offline=False,force_train=False,timestamp=None,synthetic=False):
                 from .trials import summary as trial_summary
                 from .audit import data_audit
                 report={'model_progress':trial_summary(store),'data_audit':data_audit(features,rows,cfg),'run_id':rid,'synthetic':synthetic,'metadata':metadata,'warnings':warnings,'primary_30d':primary,
-                        'across_horizons':across,'details':details,'research_candidates':rows,'holdings':holdings,
+                        'across_horizons':across,'details':details,'research_candidates':rows,'holdings':holdings,'ranker':ranker,
                         'prospective':performance(store),'backtests':{str(h):m.metadata['evaluation'] for h,m in models.items()},
                         'research_forecast_ids':ids,'new_forecast_count':created,
                         'official_forecast_ids':qualified_ids,'qualified_forecast_ids':qualified_ids,'settlement':settlement,
