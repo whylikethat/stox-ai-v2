@@ -83,3 +83,16 @@ def test_sec_available_time_and_facts():
     assert filings[0]['available_at']=='2025-01-02T15:00:00+00:00'
     assert values[0]['available_at']==filings[0]['available_at']
     assert h.calls[0][1]['interval']==.6
+
+
+def test_sec_issuer_without_xbrl_facts_is_not_an_outage():
+    raw={'filings':{'recent':{'accessionNumber':['abc'],'acceptanceDateTime':['2025-01-02T15:00:00Z'],'filingDate':['2025-01-02'],'form':['8-K']},'files':[]}}
+    h=FakeHTTP([raw,ProviderError('data.sec.gov: HTTP 404',status_code=404)])
+    filings,values=SEC('Test test@example.com',h).company('0001041130')
+    assert len(filings)==1 and values==[]
+
+def test_sec_non_404_facts_error_still_raises():
+    raw={'filings':{'recent':{'accessionNumber':['abc'],'acceptanceDateTime':['2025-01-02T15:00:00Z'],'filingDate':['2025-01-02'],'form':['8-K']},'files':[]}}
+    h=FakeHTTP([raw,ProviderError('data.sec.gov: HTTP 503',status_code=503)])
+    with pytest.raises(ProviderError):
+        SEC('Test test@example.com',h).company('0000000001')

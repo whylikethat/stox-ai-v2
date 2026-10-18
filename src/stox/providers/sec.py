@@ -59,7 +59,15 @@ class SEC:
                     stamp = (pd.Timestamp(row['filingDate'])+pd.Timedelta(days=1)).tz_localize('America/New_York')
                 row.update(cik=cik,available_at=stamp.tz_convert('UTC').isoformat(),provider='sec')
                 filings.append(row)
-        facts = cached(f'https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json')
+        try:
+            facts = cached(f'https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json')
+        except ProviderError as exc:
+            # Some issuers (trusts, some foreign filers, new registrants) have submissions but no XBRL
+            # company-facts document. That is a property of the issuer, not a provider outage, so it must
+            # not abort the refresh of every other issuer. Other errors still propagate.
+            if exc.status_code != 404:
+                raise
+            facts = {}
         by_acc = {r['accessionNumber']:r['available_at'] for r in filings}
         values = []
         for namespace, fields in facts.get('facts',{}).items():

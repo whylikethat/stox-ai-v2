@@ -260,6 +260,7 @@ class Ingestor:
                     master=SecurityMaster(self.store)
                     # Least recently refreshed first; bounded work on every invocation.
                     symbols=sec_refresh_symbols(symbols,mapping,self.store,self.cfg.sec_symbols_per_run)
+                    no_facts=0
                     for index,symbol in enumerate(symbols):
                         if symbol not in mapping: continue
                         cik = mapping[symbol]
@@ -271,6 +272,7 @@ class Ingestor:
                             self.progress.update(processed=index+1)
                             continue
                         filings,facts = sec.company(cik,store=self.store,snapshot=sec_target[:10])
+                        if not facts: no_facts+=1
                         rows=[('filings',r['accessionNumber'],r) for r in filings]
                         rows.extend(('facts',digest([cik,r['concept'],r['unit'],r.get('start'),r.get('end'),r.get('accn')]),r) for r in facts)
                         for offset in range(0,len(rows),1000):
@@ -283,7 +285,8 @@ class Ingestor:
                     with self.store.transaction():
                         self.store.advance('sec',sec_target)
                         self.store.db.execute("DELETE FROM checkpoints WHERE scope='sec:target'")
-                    self.store.health('sec','PASS','Filings and company facts updated')
+                    note=f'; {no_facts} issuer(s) in this batch have no XBRL company facts' if no_facts else ''
+                    self.store.health('sec','PASS','Filings and company facts updated'+note)
             except Exception as exc:
                 warnings.append(f'SEC unavailable: {exc}')
                 self.store.health('sec','WARN',str(exc))
