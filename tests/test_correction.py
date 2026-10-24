@@ -84,7 +84,7 @@ def test_feature_build_uses_role_aware_actions(store,cfg,calendar,monkeypatch):
     days=calendar.sessions('2024-01-02','2025-01-03');x=np.arange(len(days))
     frame=pd.DataFrame(dict(symbol='BUY',session=days,open=100+x/10,close=100+x/10,volume=1e6,available_at=[calendar.close(d).isoformat() for d in days]))
     a=dict(action_type='cash_mergers',acquirer_symbol='BUY',acquiree_symbol='SELL',effective_date='2024-06-03',resolved_tickers=['BUY','SELL'])
-    monkeypatch.setattr(store,'records',lambda kind,*args:[a] if kind=='actions' else [])
+    monkeypatch.setattr(store,'records',lambda kind,*args,**kwargs:[a] if kind=='actions' else [])
     monkeypatch.setattr(store,'bars',lambda s:frame.copy() if s=='BUY' else pd.DataFrame())
     monkeypatch.setattr(store,'warehouse_summary',lambda:[('BUY',len(frame),days[-1])])
     monkeypatch.setattr(SecurityMaster,'resolve',lambda self,s:SimpleNamespace(ticker=s))
