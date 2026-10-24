@@ -6,6 +6,8 @@ import time
 from ..storage import digest, encode
 from .http import HTTP, ProviderError
 
+from ..fundamentals import FACT_CONCEPTS
+
 class SEC:
     def __init__(self, user_agent, http=None):
         if not user_agent or '@' not in user_agent:
@@ -71,8 +73,14 @@ class SEC:
         by_acc = {r['accessionNumber']:r['available_at'] for r in filings}
         values = []
         for namespace, fields in facts.get('facts',{}).items():
+            if namespace != 'us-gaap':
+                continue
             for concept, detail in fields.items():
+                if concept not in FACT_CONCEPTS:
+                    continue
                 for unit, observations in detail.get('units',{}).items():
+                    if unit not in ('USD', 'shares'):
+                        continue
                     for r in observations:
                         stamp = by_acc.get(r.get('accn'))
                         if stamp is None and r.get('filed'):

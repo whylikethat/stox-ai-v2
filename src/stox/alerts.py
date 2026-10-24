@@ -54,6 +54,17 @@ def adverse_events(filings, now, lookback=EVENT_LOOKBACK_DAYS):
     return found
 
 
+def recent_8k(store, symbol, now):
+    """All 8-K filings for one holding straight from the store, so Form 4 volume cannot push an 8-K out of view."""
+    reader = getattr(store, 'records', None)
+    if reader is None:
+        return None
+    try:
+        return reader('filings', now, forms=('8-K', '8-K/A'), symbol=symbol)
+    except Exception:
+        return None
+
+
 def add_alerts(holdings, cfg, store, percentiles, now):
     """Annotate each holding review with trailing stop and A/B/C alerts."""
     for h in holdings:
@@ -75,7 +86,10 @@ def add_alerts(holdings, cfg, store, percentiles, now):
         pct = (percentiles or {}).get(h['symbol'])
         if pct is not None and pct <= .2:
             alerts.append({'kind': 'MODEL', 'message': f'Alpha ranker places it in the bottom {max(1, round(pct * 100))}% of scored securities'})
-        for event in adverse_events((h.get('evidence') or {}).get('filings', []), now):
+        filings = recent_8k(store, h['symbol'], now)
+        if filings is None:
+            filings = (h.get('evidence') or {}).get('filings', [])
+        for event in adverse_events(filings, now):
             alerts.append({'kind': 'EVENT', 'message': f"8-K item {event['item']} ({event['meaning']}) filed {event['filed']}"})
         h['trailing_stop'] = stop
         h['alerts'] = alerts

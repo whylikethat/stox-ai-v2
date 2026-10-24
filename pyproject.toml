@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stox-ai"
-version = "2.4.0"
+version = "2.4.1"
 description = "Local, auditable medium-term US equity forecasting and prospective evaluation"
 requires-python = ">=3.11,<3.14"
 dependencies = ["numpy>=2.0,<3", "pandas>=2.2,<3", "scipy>=1.13,<2", "scikit-learn>=1.5,<2", "requests>=2.32,<3", "pyarrow>=18,<26", "duckdb>=1.1,<2", "exchange-calendars>=4.7,<5", "joblib>=1.4,<2", "threadpoolctl>=3.5,<4"]

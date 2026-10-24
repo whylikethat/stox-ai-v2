@@ -3,6 +3,12 @@ from collections import defaultdict
 import pandas as pd
 import numpy as np
 
+# The only us-gaap concepts any feature or report reads. Loading or storing others wastes memory.
+FACT_CONCEPTS = ('Assets', 'Liabilities', 'NetIncomeLoss', 'Revenues', 'SalesRevenueNet', 'OperatingIncomeLoss',
+                 'RevenueFromContractWithCustomerExcludingAssessedTax', 'CashAndCashEquivalentsAtCarryingValue',
+                 'NetCashProvidedByUsedInOperatingActivities', 'PaymentsToAcquirePropertyPlantAndEquipment',
+                 'CommonStockSharesOutstanding')
+
 
 def enrich_fundamentals(frame,facts):
     from .features import asof_values

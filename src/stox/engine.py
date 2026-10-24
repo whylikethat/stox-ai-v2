@@ -141,7 +141,11 @@ def _run(cfg,offline=False,force_train=False,timestamp=None,synthetic=False):
                     warnings.append('Alpha ranker failed and was skipped: '+ranker['error'])
                 elif ranker['status'].startswith('RESEARCH'):
                     warnings.append('Alpha ranker has not passed its holdout validation checks; its top 10 is research, not evidence of an edge')
-                snapshots={kind:store.records(kind,started) for kind in ('news','filings','facts','earnings','actions','disclosure_documents','disclosure_transactions')}
+                from .fundamentals import FACT_CONCEPTS
+                # Evidence needs only the last few filings per issuer and a handful of fact concepts; load just those.
+                snapshots={kind:(store.recent_by_symbol(kind,started,6) if kind=='filings' else
+                                 store.records(kind,started,concepts=FACT_CONCEPTS) if kind=='facts' else store.records(kind,started))
+                           for kind in ('news','filings','facts','earnings','actions','disclosure_documents','disclosure_transactions')}
                 snapshots=index_evidence(snapshots)
                 context={s:evidence(store,s,started,cfg,snapshots) for s in {r['symbol'] for r in rows}}
                 holdings=review(store,rows,rid)

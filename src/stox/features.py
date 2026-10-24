@@ -161,9 +161,10 @@ def build_features(store, symbols, calendar, cutoff, max_rows=250_000, progress=
 def enrich(frame, store, cfg=None):
     result = frame.copy()
     news = store.records('news') if cfg is None or cfg.enable_news else []
-    filings = store.records('filings') if cfg is None or cfg.enable_sec else []
+    filings = store.records('filings', fields=('symbol', 'form')) if cfg is None or cfg.enable_sec else []
     macro = store.records('macro') if cfg is None or cfg.enable_fred else []
-    facts = store.records('facts') if cfg is None or cfg.enable_sec else []
+    from .fundamentals import FACT_CONCEPTS
+    facts = store.records('facts', concepts=FACT_CONCEPTS) if cfg is None or cfg.enable_sec else []
     news_by,filings_by,facts_by=defaultdict(list),defaultdict(list),defaultdict(list)
     for row in news:
         for symbol in set(row.get('symbols',[])): news_by[symbol].append(row)
@@ -270,7 +271,7 @@ def asof_values(times, rows, value, period='end'):
     return np.array([values[p] if p>=0 else np.nan for p in pos])
 
 def make_labels(features, store, calendar, horizons, friction, progress=None):
-    output = []
+    frames = []
     actions = store.records('actions')
     for index,(symbol,g) in enumerate(features.groupby('symbol')):
         if progress: progress.update(processed=index)
@@ -286,9 +287,9 @@ def make_labels(features, store, calendar, horizons, friction, progress=None):
         cache=store.root/'cache'/('labels-'+digest(symbol)[:20]+'.parquet')
         marker=cache.with_suffix('.key')
         if cache.exists() and marker.exists() and marker.read_text()==key:
-            output.extend(pd.read_parquet(cache).to_dict('records'))
+            frames.append(pd.read_parquet(cache))
             continue
-        begin=len(output)
+        output = []
         for row in g.to_dict('records'):
             if not row.get('revision_safe',True):
                 continue
@@ -306,13 +307,16 @@ def make_labels(features, store, calendar, horizons, friction, progress=None):
                 output.append({**row,'horizon':h,'entry_session':entry,'label_end':end,'label_available_at':calendar.close(end).isoformat(),'target':y})
         cache.parent.mkdir(parents=True,exist_ok=True)
         temporary=cache.with_suffix('.tmp')
-        pd.DataFrame(output[begin:]).to_parquet(temporary,index=False)
+        symbol_frame = pd.DataFrame(output)
+        symbol_frame.to_parquet(temporary,index=False)
+        frames.append(symbol_frame)
         temporary.replace(cache)
         marker_tmp=marker.with_suffix('.tmp-key')
         marker_tmp.write_text(key)
         marker_tmp.replace(marker)
     if progress: progress.update(processed=features.symbol.nunique())
-    result=pd.DataFrame(output)
+    frames = [f for f in frames if not f.empty]
+    result = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     if not result.empty:
         for symbol in ('SPY','QQQ'):
             benchmark=result[result.symbol==symbol].set_index(['session','horizon']).target

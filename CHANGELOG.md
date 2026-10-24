@@ -1,3 +1,12 @@
+## 2.4.1
+
+- Fix out-of-memory kills on 12 GB machines. A live run was killed with about 10.6 GB resident during feature construction. Causes: every stored SEC fact (all concepts, namespaces and units) and every filing was decoded into Python dictionaries, and label construction held one dictionary per row, per horizon, in memory.
+- SEC ingestion now stores only the us-gaap USD/shares concepts the features and reports actually read (`fundamentals.FACT_CONCEPTS`). Already-stored facts are not deleted; they are simply never loaded.
+- `Store.records()` gains SQLite-side filters (`concepts`, `forms`, `symbol`) and a `fields` projection; new `Store.recent_by_symbol()` loads only the newest filings per issuer for report evidence. Results for the data the application uses are unchanged.
+- `make_labels` builds and concatenates per-symbol DataFrames instead of one list of row dictionaries.
+- Holdings event alerts now query each holding's 8-K filings directly, so Form 4 volume can no longer push an adverse 8-K out of the last-six-filings window.
+- Add docs/LOW_MEMORY.md with laptop settings and diagnostics.
+
 ## 2.4.0
 
 - Add the alpha ranker: cross-sectional model of excess return over SPY, trained on per-session percentile ranks, judged on a purged holdout of non-overlapping cohorts against momentum and random baselines, and labelled NOT VALIDATED unless pre-declared checks pass. See docs/RANKER.md.

@@ -4,6 +4,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import shutil
 import sqlite3
 import time
@@ -175,13 +176,71 @@ class Store:
                             (kind,str(record_id),revision,str(available_at),ingested_at or now_iso(),encode(payload)))
         return revision
 
-    def records(self, kind, cutoff=None):
-        rows = self.db.execute('SELECT * FROM records WHERE kind=? ORDER BY available_at,ingested_at', (kind,))
+    def records(self, kind, cutoff=None, concepts=None, forms=None, symbol=None, fields=None):
+        """Latest revision of each record.
+
+        Optional filters (concepts, forms, symbol) and the `fields` projection run inside SQLite, so a caller that
+        needs only a few facts, filing forms or fields never decodes the whole table into Python objects."""
+        limit = pd.Timestamp(cutoff) if cutoff is not None else None
+        names = [f for f in (fields or ()) if f != 'available_at']
+        for name in names:
+            if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', name):
+                raise ValueError('Invalid record field name')
+        conditions, args = ['kind=?'], [kind]
+        for path, values in (('concept', concepts), ('form', forms)):
+            if values:
+                values = list(values)
+                conditions.append(f"json_extract(payload,'$.{path}') IN ({','.join('?' * len(values))})")
+                args.extend(values)
+        if symbol is not None:
+            conditions.append("json_extract(payload,'$.symbol')=?")
+            args.append(symbol)
+        projection = ('record_id,available_at,ingested_at' + ''.join(f",json_extract(payload,'$.{n}') AS \"{n}\"" for n in names)) if fields else '*'
+        sql = f"SELECT {projection} FROM records WHERE {' AND '.join(conditions)} ORDER BY available_at,ingested_at"
         latest = {}
-        for row in rows:
-            if cutoff is None or pd.Timestamp(row['available_at']) <= pd.Timestamp(cutoff):
-                latest[row['record_id']] = json.loads(row['payload'])
+        try:
+            for row in self.db.execute(sql, args):
+                if limit is None or pd.Timestamp(row['available_at']) <= limit:
+                    latest[row['record_id']] = ({'available_at': row['available_at'], **{n: row[n] for n in names}} if fields
+                                                else json.loads(row['payload']))
+        except sqlite3.OperationalError:
+            # SQLite without JSON support: same result, filtered in Python.
+            latest = {}
+            for row in self.db.execute('SELECT * FROM records WHERE kind=? ORDER BY available_at,ingested_at', (kind,)):
+                if limit is not None and pd.Timestamp(row['available_at']) > limit:
+                    continue
+                payload = json.loads(row['payload'])
+                if (concepts and payload.get('concept') not in concepts) or (forms and payload.get('form') not in forms):
+                    continue
+                if symbol is not None and payload.get('symbol') != symbol:
+                    continue
+                latest[row['record_id']] = ({'available_at': row['available_at'], **{n: payload.get(n) for n in names}} if fields else payload)
         return list(latest.values())
+
+    def recent_by_symbol(self, kind, cutoff=None, per_symbol=6):
+        """The newest `per_symbol` records for every symbol, selected inside SQLite (evidence needs only a few)."""
+        limit = pd.Timestamp(cutoff) if cutoff is not None else None
+        sql = """WITH latest AS (
+                   SELECT payload, available_at, ingested_at, json_extract(payload,'$.symbol') AS sym,
+                          ROW_NUMBER() OVER (PARTITION BY record_id ORDER BY available_at DESC, ingested_at DESC) AS version
+                   FROM records WHERE kind=?),
+                 ranked AS (
+                   SELECT payload, available_at, ingested_at,
+                          ROW_NUMBER() OVER (PARTITION BY sym ORDER BY available_at DESC, ingested_at DESC) AS recency
+                   FROM latest WHERE version=1)
+                 SELECT payload, available_at FROM ranked WHERE recency<=? ORDER BY available_at, ingested_at"""
+        try:
+            rows = [json.loads(r['payload']) for r in self.db.execute(sql, (kind, int(per_symbol)))
+                    if limit is None or pd.Timestamp(r['available_at']) <= limit]
+            return rows
+        except sqlite3.OperationalError:
+            kept, counts = [], {}
+            for payload in reversed(self.records(kind, cutoff)):
+                key = payload.get('symbol')
+                counts[key] = counts.get(key, 0) + 1
+                if counts[key] <= per_symbol:
+                    kept.append(payload)
+            return list(reversed(kept))
 
     def budget(self, provider, maximum, day=None):
         day = day or now_iso()[:10]
