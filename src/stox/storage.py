@@ -217,20 +217,21 @@ class Store:
                 latest[row['record_id']] = ({'available_at': row['available_at'], **{n: payload.get(n) for n in names}} if fields else payload)
         return list(latest.values())
 
-    def recent_by_symbol(self, kind, cutoff=None, per_symbol=6):
+    def recent_by_symbol(self, kind, cutoff=None, per_symbol=6, since_days=None):
         """The newest `per_symbol` records for every symbol, selected inside SQLite (evidence needs only a few)."""
         limit = pd.Timestamp(cutoff) if cutoff is not None else None
         sql = """WITH latest AS (
                    SELECT payload, available_at, ingested_at, json_extract(payload,'$.symbol') AS sym,
                           ROW_NUMBER() OVER (PARTITION BY record_id ORDER BY available_at DESC, ingested_at DESC) AS version
-                   FROM records WHERE kind=?),
+                   FROM records WHERE kind=? AND available_at>=?),
                  ranked AS (
                    SELECT payload, available_at, ingested_at,
                           ROW_NUMBER() OVER (PARTITION BY sym ORDER BY available_at DESC, ingested_at DESC) AS recency
                    FROM latest WHERE version=1)
                  SELECT payload, available_at FROM ranked WHERE recency<=? ORDER BY available_at, ingested_at"""
         try:
-            rows = [json.loads(r['payload']) for r in self.db.execute(sql, (kind, int(per_symbol)))
+            since = (limit - pd.Timedelta(days=since_days)).isoformat() if (since_days and limit is not None) else ''
+            rows = [json.loads(r['payload']) for r in self.db.execute(sql, (kind, since, int(per_symbol)))
                     if limit is None or pd.Timestamp(r['available_at']) <= limit]
             return rows
         except sqlite3.OperationalError:

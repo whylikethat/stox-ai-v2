@@ -75,6 +75,8 @@ ranker_max_p_loss_10 = 0.15
 ranker_min_cohorts = 6
 ranker_holdout_fraction = 0.25
 ranker_max_rows = 200000
+# Skip remaining horizons (retried next run) once ranker training passes this many seconds.
+ranker_time_budget_seconds = 900
 # Holdings alerts: trailing stop = highest close since purchase minus this many ATRs.
 stop_atr_multiple = 2.5
 desktop_notifications = true

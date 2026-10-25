@@ -142,8 +142,9 @@ def _run(cfg,offline=False,force_train=False,timestamp=None,synthetic=False):
                 elif ranker['status'].startswith('RESEARCH'):
                     warnings.append('Alpha ranker has not passed its holdout validation checks; its top 10 is research, not evidence of an edge')
                 from .fundamentals import FACT_CONCEPTS
+                print('[evidence] loading filings, facts and news for the report', flush=True)
                 # Evidence needs only the last few filings per issuer and a handful of fact concepts; load just those.
-                snapshots={kind:(store.recent_by_symbol(kind,started,6) if kind=='filings' else
+                snapshots={kind:(store.recent_by_symbol(kind,started,6,since_days=1095) if kind=='filings' else
                                  store.records(kind,started,concepts=FACT_CONCEPTS) if kind=='facts' else store.records(kind,started))
                            for kind in ('news','filings','facts','earnings','actions','disclosure_documents','disclosure_transactions')}
                 snapshots=index_evidence(snapshots)

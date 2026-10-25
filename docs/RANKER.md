@@ -26,11 +26,14 @@ On that holdout, non-overlapping cohorts (spaced by horizon + embargo) are score
 
 1. at least `ranker_min_cohorts` independent cohorts exist,
 2. mean rank correlation is positive with t >= 1,
-3. mean top-N excess return over SPY is positive with t >= 1, and
-4. top-N beats random selection.
+3. mean top-N excess return over SPY is positive with t >= 1,
+4. top-N beats random selection from the same universe (positive edge, t >= 1), and
+5. top-N beats the plain 120-day momentum baseline.
 
-Momentum (`momentum_120`), random and universe-average baselines are shown beside the result. The overall ranker is
-VALIDATED only when every horizon passes. Otherwise the report says so, loudly.
+Check 5 matters: random picks from today's universe often beat SPY by themselves (equal weighting plus survivorship),
+and a one-line momentum rule is a strong baseline. A model that cannot beat them adds nothing. Training rows are
+filtered point-in-time (price, liquidity, history on each session). The overall ranker is VALIDATED only when every
+horizon passes. A plain momentum top 10 is printed beside the ranker's so you can compare them live.
 
 ## Reading the output
 

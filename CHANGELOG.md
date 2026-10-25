@@ -1,3 +1,13 @@
+## 2.4.2
+
+- Tighten the alpha ranker's VALIDATED label. A horizon must now beat random selection from the same universe (positive edge, t >= 1) AND the plain 120-day momentum baseline on the purged holdout. In a live report momentum beat the ranker at every horizon, yet the earlier rules still said VALIDATED. Stored models are re-judged under the new rules (`VERDICT_VERSION`) and retrain on the next run.
+- Apply point-in-time price, liquidity and history filters inside the ranker (as the probability models already did), so rows are judged by what they were on each session, not by today's values.
+- Report a plain momentum top 10 beside the ranker's top 10 in the terminal, Markdown and HTML reports, and show edge over random and over momentum in every evidence line.
+- Add progress lines (`[ranker]`, `[evidence]`) and a training time budget (`ranker_time_budget_seconds`, default 900); skipped horizons are retried next run.
+- Bound the filings evidence query to the last three years so it uses the time index instead of scanning the whole table.
+- Add `scripts/paper_ledger.py` to log each run's picks and score matured ones against SPY and against each other; see docs/PAPER_LEDGER.md.
+- Add a memory regression test for the filtered loaders.
+
 ## 2.4.1
 
 - Fix out-of-memory kills on 12 GB machines. A live run was killed with about 10.6 GB resident during feature construction. Causes: every stored SEC fact (all concepts, namespaces and units) and every filing was decoded into Python dictionaries, and label construction held one dictionary per row, per horizon, in memory.

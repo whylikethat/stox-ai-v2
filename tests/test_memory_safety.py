@@ -84,3 +84,24 @@ def test_alerts_query_8k_directly_not_the_last_six_filings(tmp_path):
     add_alerts([holding], cfg, store, {}, '2025-03-10T00:00:00+00:00')
     assert store.calls[0][1] == {'forms': ('8-K', '8-K/A'), 'symbol': 'AAA'}
     assert [a['kind'] for a in holding['alerts']] == ['EVENT']
+
+
+def test_filtered_load_uses_a_fraction_of_the_memory(store):
+    import json
+    import tracemalloc
+    rows = []
+    for i in range(6000):
+        concept = FACT_CONCEPTS[i % 11] if i % 10 == 0 else f'Other{i % 400}'
+        payload = {'symbol': f'S{i % 50}', 'concept': concept, 'val': i, 'accn': f'acc-{i}', 'end': '2024-12-31', 'form': '10-K',
+                   'filed': '2025-01-02', 'fy': 2024, 'fp': 'FY', 'unit': 'USD', 'namespace': 'us-gaap'}
+        rows.append(('facts', f'r{i}', '0', '2025-01-02T00:00:00+00:00', '2025-02-01T00:00:00+00:00', json.dumps(payload)))
+    store.db.executemany('INSERT INTO records VALUES(?,?,?,?,?,?)', rows)
+    store.db.commit()
+
+    def peak(**kwargs):
+        tracemalloc.start()
+        store.records('facts', **kwargs)
+        _, high = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        return high
+    assert peak(concepts=FACT_CONCEPTS) < peak() * .4

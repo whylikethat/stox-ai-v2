@@ -367,10 +367,15 @@ def holdout_line(meta):
     h = (meta or {}).get('holdout') or {}
     if not h.get('n_cohorts'):
         return 'no completed holdout cohorts yet'
-    mom = _num(h.get('momentum_mean'))
-    return (f"{h['n_cohorts']} independent cohorts: top-N excess vs SPY {h['top_mean']:+.2%} per period (t={h['top_t']:.1f}), "
-            f"rank IC {h['ic_mean']:+.3f} (t={h['ic_t']:.1f}), momentum baseline {mom}, random {h['random_mean']:+.2%}, "
-            f"hit rate {h['top_hit_rate']:.0%}")
+    parts = [f"{h['n_cohorts']} independent cohorts: top-N excess vs SPY {h['top_mean']:+.2%} per period (t={h['top_t']:.1f})"]
+    if h.get('edge_vs_random') is not None:
+        parts.append(f"edge over random picks {h['edge_vs_random']:+.2%} (t={h['edge_random_t']:.1f})")
+    if h.get('momentum_mean') is not None:
+        parts.append(f"plain momentum baseline {h['momentum_mean']:+.2%}")
+    if h.get('edge_vs_momentum') is not None:
+        parts.append(f"edge over momentum {h['edge_vs_momentum']:+.2%}")
+    parts.append(f"rank IC {h['ic_mean']:+.3f} (t={h['ic_t']:.1f}), hit rate {h['top_hit_rate']:.0%}")
+    return ', '.join(parts)
 
 
 def _estimates(pick):
@@ -380,6 +385,10 @@ def _estimates(pick):
 
 def _holdings_sorted(report):
     return sorted(report.get('holdings') or [], key=lambda h: (h.get('alert_level') != 'ALERT', h['symbol']))
+
+
+def _momentum_line(p):
+    return f"#{p['rank']} {p['symbol']} ${p['close']:.2f} 120D momentum {_num(p.get('momentum_120'))}"
 
 
 def ranker_terminal(report):
@@ -395,6 +404,9 @@ def ranker_terminal(report):
         est = p.get('model_estimates', {}).get('30', {})
         out.append(f"#{p['rank']} {p['symbol']} ${p['close']:.2f} alpha={p['alpha_score']:+.2f} model median 30/60/90D={_estimates(p)} "
                    f"P(gain 30D)={_num(est.get('p_gain'), False)} P(loss>10% 30D)={_num(est.get('p_loss_10'), False)}")
+    if r.get('momentum_top'):
+        out.append('  Reference: plain 120-day momentum top 10, the baseline the ranker must beat')
+        out.extend('    ' + _momentum_line(p) for p in r['momentum_top'])
     for h, meta in (r.get('horizons') or {}).items():
         out.append(f"  {h}D evidence [{'validated' if meta['validated'] else 'NOT validated'}; {meta['algorithm']}]: {holdout_line(meta)}")
         for reason in meta.get('reasons', []):
@@ -426,6 +438,10 @@ def ranker_markdown(report):
                          f"{_num(est.get('p_gain'), False)} | {_num(est.get('p_loss_10'), False)} |")
     elif r.get('note'):
         lines.append('\n' + r['note'])
+    if r.get('momentum_top'):
+        lines += ['', '**Reference: plain 120-day momentum top 10 (the baseline the ranker must beat)**', '', '| Rank | Symbol | Name | Price | 120D momentum |', '|---:|---|---|---:|---:|']
+        lines += [f"| {p['rank']} | {p['symbol']} | {str(p['name']).replace('|', '/')} | ${p['close']:.2f} | {_num(p.get('momentum_120'))} |" for p in r['momentum_top']]
+        lines.append('')
     for h, meta in (r.get('horizons') or {}).items():
         lines.append(f"- **{h}D** ({'validated' if meta['validated'] else 'NOT validated'}, {meta['algorithm']}): holdout {holdout_line(meta)}"
                      + ''.join('; ' + x for x in meta.get('reasons', [])))
@@ -466,6 +482,11 @@ def ranker_html(report):
         out += '<div class="scroll"><table>' + head + body + '</table></div>'
     elif r.get('note'):
         out += '<p class="empty">' + e(r['note']) + '</p>'
+    if r.get('momentum_top'):
+        mhead = '<tr><th>Rank</th><th>Symbol</th><th>Name</th><th>Price</th><th>120D momentum</th></tr>'
+        mbody = ''.join('<tr>' + ''.join('<td>' + e(str(c)) + '</td>' for c in (p['rank'], p['symbol'], p['name'], f"${p['close']:.2f}", _num(p.get('momentum_120')))) + '</tr>'
+                        for p in r['momentum_top'])
+        out += '<h3>Reference: plain 120-day momentum top 10 (the baseline the ranker must beat)</h3><div class="scroll"><table>' + mhead + mbody + '</table></div>'
     evidence = ''
     for h, meta in (r.get('horizons') or {}).items():
         evidence += ('<li><b>' + e(h) + 'D</b> (' + ('validated' if meta['validated'] else 'NOT validated') + ', ' + e(meta['algorithm']) + '): holdout '

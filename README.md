@@ -107,7 +107,7 @@ The official paper entry is the next regular session open strictly after actual 
 
 Reports now open with a **Top 10 — alpha ranker** table (expected excess return over SPY, risk-capped) followed by
 **Your holdings**, with alerts first. The ranker is labelled NOT VALIDATED until its holdout checks pass, and the
-evidence lines show exactly what it earned on data it never trained on. Read `docs/RANKER.md` before relying on it.
+evidence lines show exactly what it earned on data it never trained on. Read `docs/RANKER.md` before relying on it. Keep your own evidence with `scripts/paper_ledger.py` (`docs/PAPER_LEDGER.md`).
 
 ## Holdings
 

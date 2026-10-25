@@ -148,8 +148,70 @@ def test_engine_integration_runs_ranker_and_renders_sections(cfg, monkeypatch):
     assert section['status'] in ('VALIDATED', 'RESEARCH - NOT VALIDATED'), section
     assert '30' in section['horizons'] and 'holdout' in section['horizons']['30']
     assert all(p['symbol'].startswith('DEMO') for p in section['top'])
+    assert 'momentum_top' in section and 'skipped_horizons' in section
     holding = report['holdings'][0]
     assert 'alerts' in holding and holding['alert_level'] in ('OK', 'ALERT')
     page = (path / 'report.html').read_text(encoding='utf-8')
     assert 'alpha ranker' in page and 'Your holdings' in page
     assert page.index('alpha ranker') < page.index('Primary 30D')
+
+
+def test_verdict_fails_when_plain_momentum_wins(rcfg):
+    metrics = {'n_cohorts': 10, 'ic_mean': .1, 'ic_t': 2.0, 'top_mean': .03, 'top_t': 2.0, 'random_mean': .01,
+               'edge_vs_random': .02, 'edge_random_t': 2.0, 'edge_vs_momentum': -.01}
+    ok, reasons = ranker.verdict(metrics, rcfg)
+    assert not ok and any('momentum' in r for r in reasons)
+    metrics['edge_vs_momentum'] = .01
+    assert ranker.verdict(metrics, rcfg)[0]
+
+
+def test_verdict_rejects_metrics_without_random_edge(rcfg):
+    old = {'n_cohorts': 10, 'ic_mean': .1, 'ic_t': 2.0, 'top_mean': .03, 'top_t': 2.0, 'random_mean': .01}
+    assert not ranker.verdict(old, rcfg)[0]
+
+
+def test_evaluation_reports_edges_against_random_and_momentum(rcfg):
+    holdout = ranker.train_horizon(synthetic_labels(), 30, rcfg, '2024-01-01T00:00:00+00:00')['metadata']['holdout']
+    for key in ('edge_vs_random', 'edge_random_t', 'momentum_t', 'edge_vs_momentum', 'edge_momentum_t'):
+        assert holdout[key] is not None
+    assert abs(holdout['edge_vs_random'] - (holdout['top_mean'] - holdout['random_mean'])) < 1e-9
+
+
+def test_panel_applies_point_in_time_price_liquidity_and_history_filters(rcfg):
+    labels = synthetic_labels(sessions=60, symbols=100)
+    rng = np.random.default_rng(0)
+    labels['close'] = np.where(rng.random(len(labels)) < .5, 20.0, 80.0)
+    labels['dollar_volume'] = 1e9
+    labels['history_count'] = 500
+    labels['missing_recent'] = 0
+    rcfg.min_price = 50.0
+    panel, _, _ = ranker.make_panel(labels, 30, rcfg)
+    assert 0 < len(panel) < len(labels) and (panel.close >= 50).all()
+
+
+def test_stored_models_with_old_rules_are_retrained(rcfg, tmp_path):
+    directory = tmp_path / 'ranker'
+    directory.mkdir()
+    ranker._save(directory, 30, {'metadata': {'trained_at': '2025-01-01T00:00:00+00:00', 'verdict_version': 1}})
+    assert ranker._stale(directory, 30, rcfg, '2025-01-02T00:00:00+00:00', False)
+    ranker._save(directory, 30, {'metadata': {'trained_at': '2025-01-01T00:00:00+00:00', 'verdict_version': ranker.VERDICT_VERSION}})
+    assert not ranker._stale(directory, 30, rcfg, '2025-01-02T00:00:00+00:00', False)
+
+
+def test_time_budget_below_minimum_is_rejected(tmp_path):
+    path = tmp_path / 'config.toml'
+    path.write_text('[stox]\nranker_time_budget_seconds = 5\n')
+    with pytest.raises(ValueError):
+        Config.load(str(path))
+
+
+def test_report_renders_momentum_reference_and_edges():
+    from stox.reporting import ranker_html, ranker_markdown, ranker_terminal
+    pick = {'rank': 1, 'symbol': 'AAA', 'name': 'Alpha Corp', 'close': 100.0, 'alpha_score': 1.2, 'momentum_120': .31,
+            'model_estimates': {'30': {'median_return': .01, 'p_gain': .6, 'p_loss_10': .08}}}
+    meta = {'validated': False, 'algorithm': 'ridge', 'reasons': ['top-N does not beat the plain 120-day momentum baseline'],
+            'holdout': {'n_cohorts': 12, 'top_mean': .03, 'top_t': 2.0, 'ic_mean': .05, 'ic_t': 1.5, 'top_hit_rate': .55,
+                        'edge_vs_random': .02, 'edge_random_t': 1.8, 'momentum_mean': .04, 'edge_vs_momentum': -.01}}
+    report = {'ranker': {'status': 'RESEARCH - NOT VALIDATED', 'top': [pick], 'momentum_top': [pick], 'horizons': {'30': meta}}}
+    text = ranker_markdown(report) + ranker_html(report) + '\n'.join(ranker_terminal(report))
+    assert 'Reference: plain 120-day momentum top 10' in text and 'edge over momentum -1.00%' in text
